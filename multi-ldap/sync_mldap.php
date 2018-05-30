@@ -1,4 +1,6 @@
 <?php
+include('staff.inc.php');
+
 class SyncLDAPMultiClass extends LDAPMultiAuthentication {
 	var $config;
 	var $sync_info;
