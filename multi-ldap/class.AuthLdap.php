@@ -363,35 +363,22 @@ class AuthLdap {
             $this->ldapErrorText = ldap_error( $this->connection);
             return false;  // Couldn't find the group...
         }
+
         // Get all the member DNs
-        if ( !$values = @ldap_get_values( $this->connection, $entry, "uniqueMember")) {
+        if ( !$values = @ldap_get_values( $this->connection, $entry, "member")) {
             $this->ldapErrorCode = ldap_errno( $this->connection);
             $this->ldapErrorText = ldap_error( $this->connection);
             return false; // No users in the group
         }
 
+        // Very crude, and will not search member groups
         foreach ( $values as $key => $value) {
-            /* Loop through all members - see if the uname is there...
-            ** Also check for sub-groups - this allows us to define a group as
-            ** having membership of another group.
-            ** FIXME:- This is pretty ugly code and unoptimised. It takes ages
-            ** to search if you have sub-groups.
-            */
-            list( $cn,$ou) = explode( ",",$value);
-            list( $ou_l,$ou_r) = explode( "=",$ou);
-
-            if ( $this->groups==$ou_r) {
-                list( $cn_l,$cn_r) = explode( "=",$cn);
-                // OK, So we now check the sub-group...
-                if ( $this->checkGroup ( $uname,$cn_r)) {
-                    return true;
-                }
-            }
-
-            if ( preg_match( "/$uname/i",$value)) {
+            if ( $value === $uname) {
                 return true;
             }
         }
+
+        return false;
     }
 
     // 2.4 Attribute methods -----------------------------------------------------

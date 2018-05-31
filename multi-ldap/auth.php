@@ -601,15 +601,25 @@ class LDAPMultiAuthentication {
 		}
 		if ($chkUser) {
 			if (!empty($user_info)) LdapMultiAuthPlugin::logger(LOG_INFO, 'ldap login (' . $username . ')', $loginfo[0]['msg']);
-			return $this->authOrCreate($username);
+			return $this->authOrCreate($username, $user_info);
 		}
 		else {
 			return;
 		}
 	}
 
-	function authOrCreate($username) {
+	function authOrCreate($username, $user_info) {
 		global $cfg;
+
+                $ldap = $this->getConnection();
+
+		// We want to search from the base of the DC now - backup DN then remove all but DC
+		$dn = $ldap->dn;
+		$tmp = explode(',', $dn);
+		$tmp = array_filter($tmp, create_function('$a', 'return 0 === strpos($a, "DC=");'));
+		$ldap->dn = implode(',', $tmp);
+
+		try {
 		switch ($this->type) {
 			case 'staff':
 				if (($user = StaffSession::lookup($username)) && $user->getId()) {
@@ -617,22 +627,26 @@ class LDAPMultiAuthentication {
 						// osTicket <= v1.9.7 or so
 						$user = new StaffSession($user->getId());
 					}
+
 					return $user;
 				}
 				else {
 					$staff_groups = preg_split('/;|,/', $this->config->get('multiauth-staff-group'));
-					$chkgroup;
+					$chkgroup = false;
 					foreach ($staff_groups as $staff_group) {
-						if ($ldap->checkGroup($name, $staff_group)) {
+						$distName = $user_info[0]['distinguishedName'][0];
+						if ($ldap->checkGroup($distName, $staff_group)) {
 							$chkgroup = true;
 							break;
 						}
 					}
-					
-					if ($config->get('multiauth-staff-register') && $chkgroup) {
+
+					if ($this->config->get('multiauth-staff-register') && $chkgroup) {
 						if (!($info = $this->search($username, false))) {
 							return;
 						}
+						$info = $info[0];
+
 						$errors = array();
 						$staff = array();
 						$staff['username'] = $info['username'];
@@ -641,17 +655,17 @@ class LDAPMultiAuthentication {
 						$staff['email'] = $info['email'];
 						$staff['isadmin'] = 0;
 						$staff['isactive'] = 1;
-						$staff['group_id'] = 1;
-						$staff['dept_id'] = 1;
-						$staff['welcome_email'] = "on";
-						$staff['timezone_id'] = 8;
+						$staff['dept_id'] = $cfg->getDefaultDeptId();
+						$staff['role_id'] = 1;
+						$staff['timezone'] = 8;
 						$staff['isvisible'] = 1;
-						Staff::create($staff, $errors);
-						if (($user = StaffSession::lookup($username)) && $user->getId()) {
-							if (!$user instanceof StaffSession) {
-								$user = new StaffSession($user->getId());
-							}
-							return $user;
+						$staff['backend'] = StaffLDAPMultiAuthentication::$id;
+
+						$st = Staff::create($staff, $errors);
+						if ($st->save()) {
+							// As we can't use "welcome_email" when saving, we will just do it ourselves...
+							$st->sendResetEmail('registration-staff', false);
+							return new StaffSession($st->getId());
 						}
 					}
 				}
@@ -686,6 +700,9 @@ class LDAPMultiAuthentication {
 				return $client;
 			}
 			return null;
+		} finally {
+			$ldap->dn = $dn;
+		}
 	}
 
 	function convert_user($ldap, $username) {
@@ -790,10 +807,16 @@ class LDAPMultiAuthentication {
 
 			if ($ldap->connect()) {
 				$filter = "(&(objectCategory=person)(objectClass=user)(|(sAMAccountName={q}*)(firstName={q}*)(lastName={q}*)(displayName={q}*)))";
-				if ($userlist = $ldap->getUsers($query, $this->adschema() , $filter)) {
 
+				if ($userlist = $ldap->getUsers($query, $this->adschema() , $filter)) {
 					$temp_userlist = $this->keymap($userlist);
-					$combined_userlist = array_merge($combined_userlist, self::flatarray($temp_userlist));
+
+                                        for ($i = 0; $i < count($temp_userlist); $i++) {
+                                            $temp_userlist[$i] = self::flatarray(array($temp_userlist[$i]));
+                                        }
+
+//					$temp_userlist = self::flatarray($temp_userlist);
+					$combined_userlist = array_merge($combined_userlist, $temp_userlist);
 				}
 			}
 			else {
@@ -847,8 +870,8 @@ class StaffLDAPMultiAuthentication extends StaffAuthenticationBackend implements
 				->_ldap
 				->search($query)
 		);
-		foreach ($list as & $l) {
-			$l['backend'] = static ::$id;
+		foreach ($list[0] as & $l) {
+			$l['backend'] = static::$id;
 			$l['id'] = static ::$id . ':' . $l['dn'];
 		}
 		//LdapMultiAuthPlugin::logger('info', 'search', $list);
