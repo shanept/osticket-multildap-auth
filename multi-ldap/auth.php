@@ -439,16 +439,35 @@ class LDAPMultiAuthentication {
 		);
 	}
 
-	function setConnection() {
+	function getConnection($auth = true) {
+		$info = $this->ldapinfo();
 		$ldap = new AuthLdap();
-		$ldap->serverType = 'ActiveDirectory';
-		return $ldap;
-	}
-	function ldapenv($ldapinfo) {
-		$ldap = new AuthLdap();
-		$ldap->serverType = 'ActiveDirectory';
-		$ldap->server = preg_split('/;|,/', $data['servers']);
-		$ldap->dn = $data['dn'];
+
+		foreach ($info as $data) {
+			$ldap->serverType = 'ActiveDirectory';
+			$ldap->server     = preg_split('/;|,/', $data['servers']);
+			$ldap->domain     = $data['sd'];
+			$ldap->dn         = $data['dn'];
+
+			if (!$ldap->connect()) {
+				$message = "{$data['sd']} error: {$ldap->ldapErrorCode} - {$ldapErrorText}";
+				LdapMultiAuthPlugin::logger(LOG_DEBUG, 'ldap connect error (' . $username . ')', $message);
+
+				continue;
+			}
+
+			if ($auth && !$ldap->authBind($data['bind_dn'], $data['bind_pw'])) {
+				$message = "{$data['sd']} error: {$ldap->ldapErrorCode} - {$ldapErrorText}";
+				LdapMultiAuthPlugin::logger(LOG_DEBUG, 'ldap bind error (' . $username . ')', $message);
+
+				continue;
+			}
+
+			
+
+			break;
+		}
+
 		return $ldap;
 	}
 
