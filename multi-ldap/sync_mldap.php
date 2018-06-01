@@ -392,7 +392,7 @@ class SyncLDAPMultiClass extends LDAPMultiAuthentication {
 					// Mobile Number
 					if ($ad_users[$key]->mobile != $sql_ostagents['mobile']) {
 						$qry_update_ostagent_mobile = "UPDATE " . TABLE_PREFIX . "staff
-                       SET mobile='" . sanitize_phone($ad_users[$key]->mobile) . "'
+                       SET mobile='" . $this->sanitize_phone($ad_users[$key]->mobile) . "'
                        WHERE (" . TABLE_PREFIX . "staff.username='" . $ad_users[$key]->samaccountname . "')";
 						$updates[] = 'mobile';
 						$result = db_query($qry_update_ostagent_mobile);
