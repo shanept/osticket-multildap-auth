@@ -657,7 +657,7 @@ class LDAPMultiAuthentication {
 						$staff['isactive'] = 1;
 						$staff['dept_id'] = $cfg->getDefaultDeptId();
 						$staff['role_id'] = 1;
-						$staff['timezone'] = 8;
+						$staff['timezone'] = $cfg->getDefaultTimezone();
 						$staff['isvisible'] = 1;
 						$staff['backend'] = StaffLDAPMultiAuthentication::$id;
 
@@ -677,26 +677,33 @@ class LDAPMultiAuthentication {
 				if (!($info = $this->search($username))) return;
 
 				$acct = ClientAccount::lookupByUsername($username);
+				$client = null;
 
 				if ($acct && $acct->getId()) {
 					$client = new ClientSession(new EndUser($acct->getUser()));
 				}
+
 				if (!$client) {
+					$info = $info[0];
 
-					$info['name'] = $info['first'] . " " . $info['last'];
-					$info['email'] = $info['email'];
-					$info['full'] = $info['full'];
-					$info['first'] = $info['first'];
-					$info['last'] = $info['last'];
-					$info['username'] = $info['username'];
-					$info['dn'] = $info['dn'];
+					$info['name']           = $info['full'];
+					$info['email']          = $info['email'];
+					$info['full']           = $info['full'];
+					$info['first']          = $info['first'];
+					$info['last']           = $info['last'];
+					$info['username']       = $info['username'];
+					$info['dn']             = $info['dn'];
+                                        $info['phone']          = $info['telephone'] ?: '';
 
-					$client = new ClientCreateRequest($this, $username, $info);
-					//if (!$cfg || !$cfg->isClientRegistrationEnabled() && self::$config->get('multiauth-force-register')) {
-					// return $client->attemptAutoRegister();
-					//}
+                                        $backend = UserAuthenticationBackend::getBackend(ClientLDAPMultiAuthentication::$id);
+
+					$client = new ClientCreateRequest($backend, $username, $info);
+					if (!$cfg || !$cfg->isClientRegistrationEnabled() && $this->config->get('multiauth-force-register')) {
+						return $client->attemptAutoRegister();
+					}
 					
 				}
+
 				return $client;
 			}
 			return null;
@@ -796,6 +803,7 @@ class LDAPMultiAuthentication {
 		$userlist = array();
 		$combined_userlist = array();
 		$ldapinfo = $this->ldapinfo();
+		$filter = $this->config->get('search_base');
 
 		foreach ($ldapinfo as $data) {
 			$ldap = new AuthLdap();
@@ -806,8 +814,6 @@ class LDAPMultiAuthentication {
 			$ldap->searchPassword = $data['bind_pw'];
 
 			if ($ldap->connect()) {
-				$filter = "(&(objectCategory=person)(objectClass=user)(|(sAMAccountName={q}*)(firstName={q}*)(lastName={q}*)(displayName={q}*)))";
-
 				if ($userlist = $ldap->getUsers($query, $this->adschema() , $filter)) {
 					$temp_userlist = $this->keymap($userlist);
 
@@ -865,12 +871,10 @@ class StaffLDAPMultiAuthentication extends StaffAuthenticationBackend implements
 	function search($query) {
 		//LdapMultiAuthPlugin::logger('info', 'search', $query);
 		if (strlen($query) < 3) return array();
-		$list = array(
-			$this
+		$list = $this
 				->_ldap
-				->search($query)
-		);
-		foreach ($list[0] as & $l) {
+				->search($query);
+		foreach ($list as & $l) {
 			$l['backend'] = static::$id;
 			$l['id'] = static ::$id . ':' . $l['dn'];
 		}
