@@ -215,44 +215,34 @@ class LdapMultiAuthPlugin extends Plugin {
 	 *
 	 */
 	function logger($priority, $title, $message, $alert = false, $force = false) {
-		if (!empty(self::getConfig()
-			->get('debug-choice')) && self::getConfig()
-			->get('debug-choice')) {
-			if (is_array($message) || is_object($message)) {
-				$message = json_encode($message);
-			}
-			//We are providing only 3 levels of logs. Windows style.
-			switch ($priority) {
-				case 1:
-				case LOG_EMERG:
-				case LOG_ALERT:
-				case LOG_CRIT:
-				case LOG_ERR:
-					$level = 1; //Error
-					
+		global $ost;
+
+		if (is_array($message) || is_object($message)) {
+			$message = json_encode($message);
+		}
+
+		//We are providing only 3 levels of logs. Windows style.
+		switch ($priority) {
+			case 1:
+			case LOG_EMERG:
+			case LOG_ALERT:
+			case LOG_CRIT:
+			case LOG_ERR:
+				$ost->logError($title, $message, $alert);
 				break;
-				case 2:
-				case LOG_WARN:
-				case LOG_WARNING:
-					$level = 2; //Warning
-					
+
+			case 2:
+			case LOG_WARN:
+			case LOG_WARNING:
+				$ost->logWarning($title, $message, $alert);
 				break;
-				case 3:
-				case LOG_NOTICE:
-				case LOG_INFO:
-				case LOG_DEBUG:
-				default:
-					$level = 3; //Debug
-					
-			}
-			$loglevel = array(
-				1 => 'Error',
-				'Warning',
-				'Debug'
-			);
-			//Save log based on system log level settings.
-			$sql = 'INSERT INTO ' . SYSLOG_TABLE . ' SET created=NOW(), updated=NOW() ' . ',title=' . db_input(Format::sanitize($title, true)) . ',log_type=' . db_input($loglevel[$level]) . ',log=' . db_input(Format::sanitize($message, false)) . ',ip_address=' . db_input($_SERVER['REMOTE_ADDR']);
-			db_query($sql, false);
+			case 3:
+			case LOG_NOTICE:
+			case LOG_INFO:
+			case LOG_DEBUG:
+			default:
+				$ost->logDebug($title, $message, $alert);
+				break;
 		}
 	}
 
