@@ -1,5 +1,6 @@
 <?php
-include('staff.inc.php');
+define('DISABLE_SESSION', true);
+require_once('../main.inc.php');
 
 class SyncLDAPMultiClass extends LDAPMultiAuthentication {
 	var $config;
